@@ -1,0 +1,57 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+
+# Databases & SQLite
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+*.sqlite3
+**/*.sqlite
+**/*.sqlite-shm
+**/*.sqlite-wal
+
+# Uploads / user generated files
+backend/server/uploads/*
+!backend/server/uploads/.gitkeep
+uploads/*
+!uploads/.gitkeep
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Operating System files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+.antigravity/
+.gemini/
+
+# Build & Temporary outputs
+dist/
+build/
+coverage/
+.nyc_output/
+tmp/
+temp/

@@ -1,4 +1,4 @@
-const { query } = require('../config/db');
+const { query, getDriver } = require('../config/db');
 
 // List market spaces (with status filter, search, and pagination)
 exports.listSpaces = async (req, res) => {
@@ -21,10 +21,8 @@ exports.listSpaces = async (req, res) => {
     sql += ' ORDER BY space_number ASC';
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
-    if (dbDriver === 'mysql') {
-      sql += ' LIMIT ? OFFSET ?';
-      params.push(parseInt(limit), offset);
-    }
+    sql += ' LIMIT ? OFFSET ?';
+    params.push(parseInt(limit), offset);
 
     const spaces = await query(sql, params);
     
