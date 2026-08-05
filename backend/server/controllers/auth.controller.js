@@ -111,3 +111,49 @@ exports.changePassword = async (req, res) => {
     return res.status(500).json({ message: 'Server error changing password.' });
   }
 };
+
+// Register endpoint (Public Renter Self-Registration)
+exports.register = async (req, res) => {
+  try {
+    const { first_name, middle_name, last_name, email, password, contact_number, address, gender, civil_status } = req.body;
+
+    if (!first_name || !last_name || !email || !password) {
+      return res.status(400).json({ message: 'First name, last name, email, and password are required.' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    // Check duplicate email
+    const existing = await query('SELECT id FROM users WHERE email = ?', [cleanEmail]);
+    if (existing && existing.length > 0) {
+      return res.status(400).json({ message: `An account with email ${cleanEmail} already exists.` });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const result = await query(`
+      INSERT INTO users (role, first_name, middle_name, last_name, email, password, password_plain, contact_number, address, gender, civil_status, status, approval_status)
+      VALUES ('renter', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'inactive', 'pending')
+    `, [
+      first_name.trim(),
+      middle_name ? middle_name.trim() : '',
+      last_name.trim(),
+      cleanEmail,
+      hashedPassword,
+      password,
+      contact_number ? contact_number.trim() : '',
+      address ? address.trim() : '',
+      gender || '',
+      civil_status || ''
+    ]);
+
+    return res.status(201).json({
+      message: 'Registration successful! Your account is pending approval by the market administrator.',
+      id: result.insertId || result.lastInsertRowid
+    });
+  } catch (error) {
+    console.error('Registration error:', error);
+    return res.status(500).json({ message: 'Server error during registration.' });
+  }
+};
+

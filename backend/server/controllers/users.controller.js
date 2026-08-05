@@ -79,16 +79,24 @@ exports.createUser = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(autoPassword, 10);
 
+    // If created by admin, auto-approve; if created by staff, set to pending admin approval
+    const isStaff = req.user && req.user.role === 'staff';
+    const initialStatus = isStaff ? 'inactive' : 'active';
+    const initialApproval = isStaff ? 'pending' : 'approved';
+
     const result = await query(`
       INSERT INTO users (role, first_name, middle_name, last_name, email, password, password_plain, contact_number, address, gender, civil_status, status, approval_status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 'approved')
-    `, [role, first_name, middle_name || '', last_name, autoEmail, hashedPassword, autoPassword, contact_number || '', address || '', gender || '', civil_status || '']);
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [role, first_name, middle_name || '', last_name, autoEmail, hashedPassword, autoPassword, contact_number || '', address || '', gender || '', civil_status || '', initialStatus, initialApproval]);
 
     return res.status(201).json({
-      message: 'User account created successfully.',
+      message: isStaff
+        ? 'Renter account created! Account is pending approval by the market administrator.'
+        : 'User account created successfully.',
       id: result.insertId || result.lastInsertRowid,
       email: autoEmail,
-      password_plain: autoPassword
+      password_plain: autoPassword,
+      approval_status: initialApproval
     });
   } catch (error) {
     console.error('Error creating user:', error);
