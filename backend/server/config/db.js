@@ -79,8 +79,8 @@ async function createTables() {
         location VARCHAR(100),
         size_sqm DECIMAL(10,2),
         monthly_rate DECIMAL(10,2) NOT NULL,
-        image LONGBLOB,
-        status ENUM('available','rented','maintenance') DEFAULT 'available',
+        image VARCHAR(255),
+        status ENUM('available','reserved','rented','maintenance') DEFAULT 'available',
         description TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -93,7 +93,7 @@ async function createTables() {
         space_id INT NOT NULL,
         start_date DATE NOT NULL,
         end_date DATE,
-        status ENUM('active','terminated','expired','pending') DEFAULT 'active',
+        status ENUM('active','terminated','expired','pending','cancelled','completed') DEFAULT 'active',
         created_by_staff_id INT,
         valid_id_snapshot LONGBLOB,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -316,8 +316,17 @@ async function query(sql, params = []) {
   }
 }
 
+// Get a dedicated MySQL connection for transaction support
+async function getConnection() {
+  if (dbDriver === 'mysql' && mysqlPool) {
+    return await mysqlPool.getConnection();
+  }
+  return null;
+}
+
 module.exports = {
   initDB,
   query,
-  getDriver: () => dbDriver
+  getDriver: () => dbDriver,
+  getConnection
 };

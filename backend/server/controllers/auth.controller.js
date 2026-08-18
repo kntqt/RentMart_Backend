@@ -30,6 +30,10 @@ exports.login = async (req, res) => {
       return res.status(403).json({ message: 'Your account registration was rejected.' });
     }
 
+    if (!user.password) {
+      return res.status(403).json({ message: 'Your account has not been fully set up yet. Please wait for admin approval.' });
+    }
+
     const match = await bcrypt.compare(password, user.password);
     if (!match) {
       return res.status(401).json({ message: 'Invalid credentials or incorrect password.' });
@@ -112,13 +116,13 @@ exports.changePassword = async (req, res) => {
   }
 };
 
-// Register endpoint (Public Renter Self-Registration)
+// Register endpoint (Public Renter Self-Registration — no password required)
 exports.register = async (req, res) => {
   try {
-    const { first_name, middle_name, last_name, email, password, contact_number, address, gender, civil_status } = req.body;
+    const { first_name, middle_name, last_name, email, contact_number, address, gender, civil_status } = req.body;
 
-    if (!first_name || !last_name || !email || !password) {
-      return res.status(400).json({ message: 'First name, last name, email, and password are required.' });
+    if (!first_name || !last_name || !email) {
+      return res.status(400).json({ message: 'First name, last name, and email are required.' });
     }
 
     const cleanEmail = email.trim().toLowerCase();
@@ -129,18 +133,14 @@ exports.register = async (req, res) => {
       return res.status(400).json({ message: `An account with email ${cleanEmail} already exists.` });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-
     const result = await query(`
       INSERT INTO users (role, first_name, middle_name, last_name, email, password, password_plain, contact_number, address, gender, civil_status, status, approval_status)
-      VALUES ('renter', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'inactive', 'pending')
+      VALUES ('renter', ?, ?, ?, ?, '', '', ?, ?, ?, ?, 'inactive', 'pending')
     `, [
       first_name.trim(),
       middle_name ? middle_name.trim() : '',
       last_name.trim(),
       cleanEmail,
-      hashedPassword,
-      password,
       contact_number ? contact_number.trim() : '',
       address ? address.trim() : '',
       gender || '',
@@ -148,7 +148,7 @@ exports.register = async (req, res) => {
     ]);
 
     return res.status(201).json({
-      message: 'Registration successful! Your account is pending approval by the market administrator.',
+      message: 'Registration submitted! Your account is pending approval. The administrator will create your login credentials upon approval.',
       id: result.insertId || result.lastInsertRowid
     });
   } catch (error) {

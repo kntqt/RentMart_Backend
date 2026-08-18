@@ -141,13 +141,32 @@ exports.toggleStatus = async (req, res) => {
   }
 };
 
-// Approve renter
+// Approve renter (with account credential creation)
 exports.approveRenter = async (req, res) => {
   try {
     const { id } = req.params;
+    const { email, password } = req.body;
 
-    // Activate user
-    await query("UPDATE users SET status='active', approval_status='approved' WHERE id = ?", [id]);
+    if (!email || !email.trim()) {
+      return res.status(400).json({ message: 'An email address is required to create the renter account.' });
+    }
+
+    if (!password || password.trim().length < 6) {
+      return res.status(400).json({ message: 'A password of at least 6 characters is required to create the renter account.' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    // Check if this email is already used by another user
+    const existing = await query('SELECT id FROM users WHERE email = ? AND id != ?', [cleanEmail, id]);
+    if (existing && existing.length > 0) {
+      return res.status(400).json({ message: `The email ${cleanEmail} is already in use by another account.` });
+    }
+
+    const hashedPassword = await bcrypt.hash(password.trim(), 10);
+
+    // Activate user and set email + password
+    await query("UPDATE users SET status='active', approval_status='approved', email=?, password=?, password_plain=? WHERE id = ?", [cleanEmail, hashedPassword, password.trim(), id]);
 
     // Activate pending rental and update space to rented
     const pendingRentals = await query("SELECT id, space_id FROM rentals WHERE renter_id = ? AND status = 'pending'", [id]);
@@ -156,8 +175,21 @@ exports.approveRenter = async (req, res) => {
       await query("UPDATE spaces SET status='rented' WHERE id = ?", [rental.space_id]);
     }
 
-    return res.json({ message: 'Renter approved successfully. Rental activated.' });
+    // Fetch the approved user info to return
+    const users = await query('SELECT id, first_name, last_name, email FROM users WHERE id = ?', [id]);
+    const user = users[0];
+
+    return res.json({
+      message: 'Renter approved and account created successfully.',
+      user: {
+        id: user.id,
+        name: `${user.first_name} ${user.last_name}`,
+        email: user.email,
+        password_plain: password.trim()
+      }
+    });
   } catch (error) {
+    console.error('Error approving renter:', error);
     return res.status(500).json({ message: 'Error approving renter.' });
   }
 };

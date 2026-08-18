@@ -106,7 +106,7 @@ exports.getRenterDashboard = async (req, res) => {
 
     // Renter assigned spaces details
     const assignedSpaces = await query(`
-      SELECT s.space_number, s.location, s.size_sqm, s.monthly_rate, r.start_date, r.end_date, r.status
+      SELECT s.space_number, s.location, s.size_sqm, s.monthly_rate, s.image, r.start_date, r.end_date, r.status
       FROM rentals r
       JOIN spaces s ON r.space_id = s.id
       WHERE r.renter_id = ? AND r.status = 'active'
