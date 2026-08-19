@@ -80,13 +80,28 @@ exports.getMe = async (req, res) => {
 exports.updateProfile = async (req, res) => {
   try {
     const { first_name, middle_name, last_name, contact_number, address, gender, civil_status } = req.body;
-    await query(
-      `UPDATE users SET first_name = ?, middle_name = ?, last_name = ?, contact_number = ?, address = ?, gender = ?, civil_status = ? WHERE id = ?`,
-      [first_name, middle_name, last_name, contact_number, address, gender, civil_status, req.user.id]
-    );
+    
+    let sql = `UPDATE users SET first_name = ?, middle_name = ?, last_name = ?, contact_number = ?, address = ?, gender = ?, civil_status = ?`;
+    const params = [first_name, middle_name || '', last_name, contact_number || '', address || '', gender || '', civil_status || ''];
 
-    return res.json({ message: 'Profile updated successfully.' });
+    if (req.file) {
+      sql += `, profile_image = ?`;
+      params.push(req.file.filename);
+    }
+
+    sql += ` WHERE id = ?`;
+    params.push(req.user.id);
+
+    await query(sql, params);
+
+    const updated = await query('SELECT id, role, first_name, middle_name, last_name, email, contact_number, address, gender, civil_status, status, approval_status, profile_image, created_at FROM users WHERE id = ?', [req.user.id]);
+
+    return res.json({
+      message: 'Profile updated successfully.',
+      user: updated[0]
+    });
   } catch (error) {
+    console.error('Error updating profile:', error);
     return res.status(500).json({ message: 'Server error updating profile.' });
   }
 };

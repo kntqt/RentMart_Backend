@@ -145,14 +145,26 @@ exports.toggleStatus = async (req, res) => {
 exports.approveRenter = async (req, res) => {
   try {
     const { id } = req.params;
-    const { email, password } = req.body;
+    let { email, password } = req.body;
 
+    const targetUsers = await query('SELECT id, first_name, last_name, email, contact_number FROM users WHERE id = ?', [id]);
+    if (!targetUsers || targetUsers.length === 0) {
+      return res.status(404).json({ message: 'Renter account not found.' });
+    }
+    const targetUser = targetUsers[0];
+
+    // Auto-generate email if omitted
     if (!email || !email.trim()) {
-      return res.status(400).json({ message: 'An email address is required to create the renter account.' });
+      const cleanFirst = (targetUser.first_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const cleanLast = (targetUser.last_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      email = targetUser.email || `${cleanFirst}${cleanLast}@gmail.com`;
     }
 
+    // Auto-generate password if omitted (e.g. Juan1234 or First+Last4Digits)
     if (!password || password.trim().length < 6) {
-      return res.status(400).json({ message: 'A password of at least 6 characters is required to create the renter account.' });
+      const cleanFirst = targetUser.first_name ? targetUser.first_name.charAt(0).toUpperCase() + targetUser.first_name.slice(1).toLowerCase() : 'Renter';
+      const suffix = targetUser.contact_number && targetUser.contact_number.length >= 4 ? targetUser.contact_number.slice(-4) : '1234';
+      password = `${cleanFirst}${suffix}`;
     }
 
     const cleanEmail = email.trim().toLowerCase();
