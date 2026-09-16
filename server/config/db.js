@@ -210,7 +210,7 @@ async function createTables() {
 async function seedInitialData() {
   const users = await query('SELECT count(*) as cnt FROM users');
   const count = users[0].cnt || users[0]['count(*)'] || 0;
-  
+
   if (count === 0) {
     console.log('Seeding initial default accounts and market spaces...');
     const hashedAdminPass = await bcrypt.hash('Admin1234', 10);
@@ -239,23 +239,35 @@ async function seedInitialData() {
 
     // Seed Sample Market Spaces
     const defaultSpaces = [
-      ['BLK-101', 'Section A - Wet Market Front', 25.00, 36000.00, 'rented', 'Prime wet market front corner stall suitable for fresh meats & seafood.'],
-      ['BLK-102', 'Section A - Wet Market Inner', 20.00, 30000.00, 'available', 'Spacious stall with tiled flooring and drainage for market vendors.'],
-      ['BLK-103', 'Section B - Dry Goods Entrance', 30.00, 48000.00, 'available', 'High foot traffic dry goods commercial unit near main gate.'],
-      ['BLK-104', 'Section B - Dry Goods Inner', 22.50, 32000.00, 'available', 'Ideal for clothing, footwear, and general dry goods retail.'],
-      ['BLK-105', 'Section C - Food Court Hall 1', 18.00, 40000.00, 'available', 'Food stall equiped with stainless exhaust hood setup.'],
-      ['BLK-106', 'Section C - Food Court Hall 2', 18.00, 40000.00, 'available', 'Food stall location near customer seating section.'],
-      ['BLK-107', 'Section D - Grocery & Grains', 35.00, 55000.00, 'available', 'Large commercial space for rice wholesaling and grocery store.'],
-      ['BLK-108', 'Section E - Services & Repair', 15.00, 24000.00, 'maintenance', 'Service booth space undergoing electrical maintenance upgrades.']
+      ['BLK-101', 'Section A - Wet Market Front', 25.00, 36000.00, 'rented', 'Prime wet market front corner stall suitable for fresh meats & seafood.', 'stall_wet.png'],
+      ['BLK-102', 'Section A - Wet Market Inner', 20.00, 30000.00, 'available', 'Spacious stall with tiled flooring and drainage for market vendors.', 'stall_fruits.jpg'],
+      ['BLK-103', 'Section B - Dry Goods Entrance', 30.00, 48000.00, 'available', 'High foot traffic dry goods commercial unit near main gate.', 'stall_retail.png'],
+      ['BLK-104', 'Section B - Dry Goods Inner', 22.50, 32000.00, 'available', 'Ideal for clothing, footwear, and general dry goods retail.', 'stall_apparel.jpg'],
+      ['BLK-105', 'Section C - Food Court Hall 1', 18.00, 40000.00, 'available', 'Food stall equipped with stainless exhaust hood setup.', 'stall_food.png'],
+      ['BLK-106', 'Section C - Food Court Hall 2', 18.00, 40000.00, 'available', 'Food stall location near customer seating section.', 'stall_coffee.jpg'],
+      ['BLK-107', 'Section D - Grocery & Grains', 35.00, 55000.00, 'available', 'Large commercial space for rice wholesaling and grocery store.', 'stall_grocery.png'],
+      ['BLK-108', 'Section E - Services & Repair', 15.00, 24000.00, 'maintenance', 'Service booth space undergoing electrical maintenance upgrades.', 'stall_hardware.jpg'],
+      ['BLK-201', 'Section F - Tropical Fruits & Citrus Hub', 22.00, 34000.00, 'available', 'Vibrant fruit stall with display racks for fresh mangoes, bananas, citrus, and seasonal harvests.', 'stall_fruits.jpg'],
+      ['BLK-202', 'Section G - Artisan Bakery & Pastry Corner', 24.50, 42000.00, 'available', 'Glass-fronted bakery booth equipped for freshly baked breads, pastries, native delicacies, and cakes.', 'stall_bakery.jpg'],
+      ['BLK-203', 'Section H - Specialty Coffee & Refreshments Kiosk', 18.00, 38000.00, 'available', 'Corner beverage kiosk with espresso bar counter, iced refreshments, and customer pickup lane.', 'stall_coffee.jpg'],
+      ['BLK-204', 'Section I - Fashion Apparel & Textile Boutique', 28.00, 45000.00, 'available', 'Spacious dry goods boutique for ready-to-wear garments, school uniforms, and local textiles.', 'stall_apparel.jpg'],
+      ['BLK-205', 'Section J - Ornamental Flora & Garden Nursery', 20.00, 30000.00, 'available', 'Well-ventilated perimeter stall with water access for fresh cut flowers, orchids, and potted ornamental plants.', 'stall_flowers.jpg'],
+      ['BLK-206', 'Section K - Tech Gadgets & Electronics Repair', 16.50, 32000.00, 'available', 'Secure lockable commercial booth for mobile accessories, consumer electronics, and gadget repair services.', 'stall_electronics.jpg'],
+      ['BLK-207', 'Section L - Community Pharmacy & Herbal Wellness', 26.00, 48000.00, 'available', 'Clean tiled commercial space with medicine shelving and counter space for retail pharmaceuticals.', 'stall_pharmacy.jpg'],
+      ['BLK-208', 'Section M - Hardware & Home Electrical Supplies', 32.00, 50000.00, 'available', 'Heavy-duty commercial unit for plumbing, electrical parts, hand tools, and building supplies.', 'stall_hardware.jpg'],
+      ['BLK-209', 'Section N - Bohol Native Crafts & Souvenir Center', 21.00, 35000.00, 'available', 'Handicrafts showcase stall featuring local woven banig, basketry, souvenir items, and native delicacies.', 'stall_crafts.jpg'],
+      ['BLK-210', 'Section A - Cold Storage Seafood Showcase', 25.00, 39000.00, 'available', 'Wet market stall with stainless drainage and ice storage counter for fresh marine catch.', 'stall_wet.png'],
+      ['BLK-211', 'Section C - Gourmet Grill & Delicacies Station', 19.50, 41000.00, 'available', 'Equipped food court stall with commercial grease trap and high-capacity exhaust ventilation.', 'stall_food.png'],
+      ['BLK-212', 'Section D - Rice & Bulk Commodity Wholesale', 38.00, 58000.00, 'available', 'Large warehouse-style stall for bulk rice distribution, feeds, and wholesale dry groceries.', 'stall_grocery.png']
     ];
 
     let space1Id = null;
     for (let i = 0; i < defaultSpaces.length; i++) {
       const s = defaultSpaces[i];
       const sRes = await query(`
-        INSERT INTO spaces (space_number, location, size_sqm, monthly_rate, status, description)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `, [s[0], s[1], s[2], s[3], s[4], s[5]]);
+        INSERT INTO spaces (space_number, location, size_sqm, monthly_rate, status, description, image)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [s[0], s[1], s[2], s[3], s[4], s[5], s[6]]);
       if (i === 0) space1Id = sRes.insertId || sRes.lastInsertRowid || 1;
     }
 

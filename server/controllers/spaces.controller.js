@@ -120,3 +120,28 @@ exports.updateSpaceStatus = async (req, res) => {
     return res.status(500).json({ message: 'Error updating space status.' });
   }
 };
+
+// Delete space (Admin)
+exports.deleteSpace = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check if space has active or pending rentals
+    const activeRentals = await query(
+      "SELECT id FROM rentals WHERE space_id = ? AND status IN ('active', 'pending')",
+      [id]
+    );
+
+    if (activeRentals && activeRentals.length > 0) {
+      return res.status(400).json({
+        message: 'Cannot delete space with active or pending rental leases. Please complete or cancel the rental first.'
+      });
+    }
+
+    await query('DELETE FROM spaces WHERE id = ?', [id]);
+    return res.json({ message: 'Market space deleted successfully.' });
+  } catch (error) {
+    console.error('Error deleting space:', error);
+    return res.status(500).json({ message: 'Error deleting space.' });
+  }
+};

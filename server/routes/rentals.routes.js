@@ -14,12 +14,12 @@ router.get('/my-rentals', verifyToken, roleGuard(['renter']), rentalsController.
 router.use(verifyToken);
 
 router.get('/', roleGuard(['admin', 'staff']), rentalsController.listRentals);
-router.get('/pending', roleGuard(['admin']), rentalsController.listPendingRentals);
+router.get('/pending', roleGuard(['staff', 'admin']), rentalsController.listPendingRentals);
 router.get('/lookup', roleGuard(['staff', 'admin']), rentalsController.lookupRenterByEmail);
 router.post('/', roleGuard(['staff', 'admin']), rentalsController.createRental);
-router.patch('/:id/approve', roleGuard(['admin']), rentalsController.approveRental);
-router.patch('/:id/reject', roleGuard(['admin']), rentalsController.rejectRental);
-router.patch('/:id/cancel', roleGuard(['admin']), rentalsController.cancelRental);
-router.patch('/:id/complete', roleGuard(['admin']), rentalsController.completeRental);
+router.patch('/:id/approve', roleGuard(['staff', 'admin']), rentalsController.approveRental);
+router.patch('/:id/reject', roleGuard(['staff', 'admin']), rentalsController.rejectRental);
+router.patch('/:id/cancel', roleGuard(['staff', 'admin']), rentalsController.cancelRental);
+router.patch('/:id/complete', roleGuard(['staff', 'admin']), rentalsController.completeRental);
 
 module.exports = router;

@@ -148,7 +148,7 @@ exports.createRental = async (req, res) => {
         conn.release();
 
         return res.status(201).json({
-          message: 'Rental assignment created successfully. Space is now reserved. Awaiting Admin approval.',
+          message: 'Rental assignment created successfully. Space is now reserved. Awaiting Staff approval.',
           rental_id: result.insertId
         });
       } catch (txErr) {
@@ -177,7 +177,7 @@ exports.createRental = async (req, res) => {
       await query("UPDATE users SET approval_status='pending' WHERE id=?", [renter.id]);
 
       return res.status(201).json({
-        message: 'Rental assignment created successfully. Space is now reserved. Awaiting Admin approval.',
+        message: 'Rental assignment created successfully. Space is now reserved. Awaiting Staff approval.',
         rental_id: result.insertId || result.lastInsertRowid
       });
     }
@@ -228,7 +228,7 @@ exports.renterRequestRental = async (req, res) => {
       [renterId]
     );
     if (existingPending && existingPending.length > 0) {
-      return res.status(400).json({ message: 'You already have a pending rental request. Please wait for admin approval before submitting another.' });
+      return res.status(400).json({ message: 'You already have a pending rental request. Please wait for staff approval before submitting another.' });
     }
 
     // Calculate default end_date to 1 year if not provided
@@ -274,7 +274,7 @@ exports.renterRequestRental = async (req, res) => {
         conn.release();
 
         return res.status(201).json({
-          message: 'Rental request submitted successfully! The space is now reserved for you pending admin approval.',
+          message: 'Rental request submitted successfully! The space is now reserved for you pending staff approval.',
           rental_id: result.insertId,
           space_number: space.space_number
         });
@@ -305,7 +305,7 @@ exports.renterRequestRental = async (req, res) => {
       await query("UPDATE spaces SET status='reserved' WHERE id=?", [space_id]);
 
       return res.status(201).json({
-        message: 'Rental request submitted successfully! The space is now reserved for you pending admin approval.',
+        message: 'Rental request submitted successfully! The space is now reserved for you pending staff approval.',
         rental_id: result.insertId || result.lastInsertRowid,
         space_number: space.space_number
       });
