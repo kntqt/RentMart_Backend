@@ -28,33 +28,163 @@ exports.listUsers = async (req, res) => {
   }
 };
 
-// List renters with assigned spaces
+// List renters with single profile and consolidated rental history
 exports.listRenters = async (req, res) => {
   try {
     const { search } = req.query;
     let sql = `
-      SELECT u.id, u.first_name, u.middle_name, u.last_name, u.email, u.password_plain, u.contact_number, 
-             u.address, u.status, u.approval_status, u.created_at,
-             s.space_number, s.location, r.id as rental_id, r.status as rental_status
+      SELECT u.id, u.role, u.first_name, u.middle_name, u.last_name, u.email, u.password_plain, u.contact_number, 
+             u.address, u.gender, u.civil_status, u.status, u.approval_status, u.created_at
       FROM users u
-      LEFT JOIN rentals r ON u.id = r.renter_id AND r.status = 'active'
-      LEFT JOIN spaces s ON r.space_id = s.id
       WHERE u.role = 'renter'
     `;
     const params = [];
 
     if (search) {
-      sql += ' AND (u.first_name LIKE ? OR u.last_name LIKE ? OR u.email LIKE ? OR s.space_number LIKE ?)';
+      sql += ` AND (
+        u.first_name LIKE ? 
+        OR u.last_name LIKE ? 
+        OR u.email LIKE ? 
+        OR u.contact_number LIKE ?
+        OR u.id IN (
+          SELECT r_sub.renter_id 
+          FROM rentals r_sub 
+          JOIN spaces s_sub ON r_sub.space_id = s_sub.id 
+          WHERE s_sub.space_number LIKE ?
+        )
+      )`;
       const s = `%${search}%`;
-      params.push(s, s, s, s);
+      params.push(s, s, s, s, s);
     }
 
     sql += ' ORDER BY u.id DESC';
 
-    const renters = await query(sql, params);
-    return res.json(renters);
+    const users = await query(sql, params);
+
+    // For each renter, fetch all rental history, billings, and payment summaries under one profile
+    const rentersWithHistory = await Promise.all(users.map(async (u) => {
+      // 1. Fetch all rentals (active, pending, completed, cancelled, terminated)
+      const rentals = await query(`
+        SELECT r.id, r.space_id, r.start_date, r.end_date, r.status, r.created_at,
+               s.space_number, s.location, s.size_sqm, s.monthly_rate, s.image
+        FROM rentals r
+        JOIN spaces s ON r.space_id = s.id
+        WHERE r.renter_id = ?
+        ORDER BY r.id DESC
+      `, [u.id]);
+
+      // 2. Fetch all billings
+      const billings = await query(`
+        SELECT b.id, b.rental_id, b.billing_month, b.amount_due, b.downpayment, b.balance, b.due_date, b.status, b.created_at,
+               s.space_number
+        FROM billings b
+        JOIN rentals r ON b.rental_id = r.id
+        JOIN spaces s ON r.space_id = s.id
+        WHERE b.renter_id = ?
+        ORDER BY b.id DESC
+      `, [u.id]);
+
+      // 3. Fetch all payments
+      const payments = await query(`
+        SELECT p.id, p.billing_id, p.amount_paid, p.payment_type, p.balance_after, p.payment_date, p.payment_method, p.reference_number
+        FROM payments p
+        WHERE p.renter_id = ?
+        ORDER BY p.payment_date DESC
+      `, [u.id]);
+
+      // Calculate aggregates
+      const activeRentals = rentals.filter(r => r.status === 'active');
+      const pendingRentals = rentals.filter(r => r.status === 'pending');
+      const completedRentals = rentals.filter(r => r.status === 'completed');
+      const unpaidBalance = billings
+        .filter(b => ['unpaid', 'overdue'].includes(b.status))
+        .reduce((sum, b) => sum + parseFloat(b.balance || 0), 0);
+      const totalPaid = payments.reduce((sum, p) => sum + parseFloat(p.amount_paid || 0), 0);
+
+      const activeSpaceNumbers = activeRentals.map(r => r.space_number).join(', ');
+
+      return {
+        ...u,
+        rentals,
+        activeRentals,
+        pendingRentals,
+        completedRentals,
+        billings,
+        payments,
+        active_spaces_count: activeRentals.length,
+        total_spaces_count: rentals.length,
+        active_spaces_list: activeRentals.map(r => r.space_number),
+        space_number: activeSpaceNumbers || (rentals.length > 0 ? `${rentals[0].space_number} (${rentals[0].status})` : null),
+        location: activeRentals.length > 0 ? activeRentals[0].location : (rentals.length > 0 ? rentals[0].location : null),
+        unpaid_balance: unpaidBalance,
+        total_paid: totalPaid,
+        has_unpaid_balance: unpaidBalance > 0
+      };
+    }));
+
+    return res.json(rentersWithHistory);
   } catch (error) {
+    console.error('Error retrieving renters list:', error);
     return res.status(500).json({ message: 'Error retrieving renters list.' });
+  }
+};
+
+// Get detailed single renter profile with complete rental history
+exports.getRenterProfileHistory = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const users = await query('SELECT * FROM users WHERE id = ? AND role = "renter"', [id]);
+    if (!users || users.length === 0) {
+      return res.status(404).json({ message: 'Renter not found.' });
+    }
+    const u = users[0];
+
+    const rentals = await query(`
+      SELECT r.id, r.space_id, r.start_date, r.end_date, r.status, r.created_at,
+             s.space_number, s.location, s.size_sqm, s.monthly_rate, s.image
+      FROM rentals r
+      JOIN spaces s ON r.space_id = s.id
+      WHERE r.renter_id = ?
+      ORDER BY r.id DESC
+    `, [id]);
+
+    const billings = await query(`
+      SELECT b.id, b.rental_id, b.billing_month, b.amount_due, b.downpayment, b.balance, b.due_date, b.status, b.created_at,
+             s.space_number, s.location
+      FROM billings b
+      JOIN rentals r ON b.rental_id = r.id
+      JOIN spaces s ON r.space_id = s.id
+      WHERE b.renter_id = ?
+      ORDER BY b.id DESC
+    `, [id]);
+
+    const payments = await query(`
+      SELECT p.id, p.billing_id, p.amount_paid, p.payment_type, p.balance_after, p.payment_date, p.payment_method, p.reference_number
+      FROM payments p
+      WHERE p.renter_id = ?
+      ORDER BY p.payment_date DESC
+    `, [id]);
+
+    const activeRentals = rentals.filter(r => r.status === 'active');
+    const unpaidBalance = billings
+      .filter(b => ['unpaid', 'overdue'].includes(b.status))
+      .reduce((sum, b) => sum + parseFloat(b.balance || 0), 0);
+    const totalPaid = payments.reduce((sum, p) => sum + parseFloat(p.amount_paid || 0), 0);
+
+    return res.json({
+      ...u,
+      rentals,
+      activeRentals,
+      billings,
+      payments,
+      active_spaces_count: activeRentals.length,
+      total_spaces_count: rentals.length,
+      unpaid_balance: unpaidBalance,
+      total_paid: totalPaid,
+      has_unpaid_balance: unpaidBalance > 0
+    });
+  } catch (error) {
+    return res.status(500).json({ message: 'Error fetching renter profile history.' });
   }
 };
 

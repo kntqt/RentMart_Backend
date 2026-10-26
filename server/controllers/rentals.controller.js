@@ -1,5 +1,28 @@
 const { query, getDriver, getConnection } = require('../config/db');
 
+// Helper to validate 6 months minimum
+function validateSixMonthMinimum(startDateStr, endDateStr) {
+  if (!startDateStr || !endDateStr) return false;
+  const start = new Date(startDateStr);
+  const end = new Date(endDateStr);
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
+  if (end <= start) return false;
+
+  const minEndDate = new Date(start);
+  minEndDate.setMonth(minEndDate.getMonth() + 6);
+  // 2 days grace for month end variations
+  minEndDate.setDate(minEndDate.getDate() - 2);
+
+  return end >= minEndDate;
+}
+
+function getDefaultEndDate(startDateStr) {
+  const start = new Date(startDateStr);
+  const defaultEnd = new Date(start);
+  defaultEnd.setMonth(defaultEnd.getMonth() + 6);
+  return defaultEnd.toISOString().split('T')[0];
+}
+
 // List active/all rentals
 exports.listRentals = async (req, res) => {
   try {
@@ -29,13 +52,14 @@ exports.listRentals = async (req, res) => {
   }
 };
 
-// List pending rentals for Admin approval
+// List pending rentals for Admin/Staff approval with real-time unpaid balance check
 exports.listPendingRentals = async (req, res) => {
   try {
     const sql = `
       SELECT r.id as rental_id, r.start_date, r.end_date, r.created_at,
              u.id as renter_id, u.first_name, u.last_name, u.email, u.contact_number,
-             s.id as space_id, s.space_number, s.location, s.monthly_rate
+             s.id as space_id, s.space_number, s.location, s.monthly_rate,
+             COALESCE((SELECT SUM(b.balance) FROM billings b WHERE b.renter_id = u.id AND b.status IN ('unpaid', 'overdue') AND b.balance > 0), 0) as renter_unpaid_balance
       FROM rentals r
       JOIN users u ON r.renter_id = u.id
       JOIN spaces s ON r.space_id = s.id
@@ -68,12 +92,16 @@ exports.lookupRenterByEmail = async (req, res) => {
 
     const renter = users[0];
 
-    // Check unpaid billing count
+    // Check unpaid billing count and balance
     const billings = await query(`
-      SELECT COUNT(*) as unpaid_count FROM billings WHERE renter_id = ? AND status = 'unpaid'
+      SELECT COUNT(*) as unpaid_count, COALESCE(SUM(balance), 0) as total_unpaid 
+      FROM billings 
+      WHERE renter_id = ? AND status IN ('unpaid', 'overdue') AND balance > 0
     `, [renter.id]);
 
-    renter.unpaid_bill_count = billings[0].unpaid_count || billings[0]['COUNT(*)'] || 0;
+    renter.unpaid_bill_count = billings[0].unpaid_count || 0;
+    renter.unpaid_balance = parseFloat(billings[0].total_unpaid || 0);
+    renter.has_unpaid_balance = renter.unpaid_balance > 0;
 
     return res.json(renter);
   } catch (error) {
@@ -109,8 +137,29 @@ exports.createRental = async (req, res) => {
     }
     const renter = users[0];
 
-    // Calculate default end_date to 1 year if not provided
-    const calculatedEndDate = end_date || new Date(new Date(start_date).setFullYear(new Date(start_date).getFullYear() + 1)).toISOString().split('T')[0];
+    // Check payment restriction: Renter cannot reserve/rent if they have unpaid balance
+    const unpaidRows = await query(`
+      SELECT COALESCE(SUM(balance), 0) as total_unpaid
+      FROM billings
+      WHERE renter_id = ? AND status IN ('unpaid', 'overdue') AND balance > 0
+    `, [renter.id]);
+    const totalUnpaid = parseFloat(unpaidRows[0]?.total_unpaid || 0);
+    if (totalUnpaid > 0) {
+      return res.status(400).json({
+        message: `Payment Restriction: Renter ${renter.first_name} ${renter.last_name} has an outstanding unpaid balance of ₱${totalUnpaid.toLocaleString('en-US', { minimumFractionDigits: 2 })}. All existing balances must be paid before assigning or reserving another space.`,
+        unpaid_balance: totalUnpaid
+      });
+    }
+
+    // Calculate default end_date to 6 months if not provided
+    const calculatedEndDate = end_date || getDefaultEndDate(start_date);
+
+    // Validate 6-month minimum rental period
+    if (!validateSixMonthMinimum(start_date, calculatedEndDate)) {
+      return res.status(400).json({
+        message: 'The minimum rental period is 6 months. The system does not allow reservations for less than 6 months.'
+      });
+    }
 
     // === MySQL Transaction with Row Locking ===
     if (conn) {
@@ -190,7 +239,7 @@ exports.createRental = async (req, res) => {
   }
 };
 
-// Renter Self-Service Rental Request
+// Renter Self-Service Reservation Request
 // Uses MySQL transaction with row-level locking to prevent double-rental
 exports.renterRequestRental = async (req, res) => {
   const conn = await getConnection();
@@ -214,7 +263,7 @@ exports.renterRequestRental = async (req, res) => {
     // Verify the renter exists and is active
     const renterRows = await query('SELECT * FROM users WHERE id = ? AND role = "renter"', [renterId]);
     if (!renterRows || renterRows.length === 0) {
-      return res.status(403).json({ message: 'Only registered renters can request a rental.' });
+      return res.status(403).json({ message: 'Only registered renters can request a reservation.' });
     }
 
     const renter = renterRows[0];
@@ -222,21 +271,37 @@ exports.renterRequestRental = async (req, res) => {
       return res.status(403).json({ message: 'Your account is not active. Please contact the market administrator.' });
     }
 
-    // Check if renter already has a pending rental request
+    // Payment Restriction: Check if renter has an unpaid balance before allowing a new reservation
+    const unpaidRows = await query(`
+      SELECT COALESCE(SUM(balance), 0) as total_unpaid, COUNT(*) as unpaid_count
+      FROM billings
+      WHERE renter_id = ? AND status IN ('unpaid', 'overdue') AND balance > 0
+    `, [renterId]);
+    const totalUnpaid = parseFloat(unpaidRows[0]?.total_unpaid || 0);
+    if (totalUnpaid > 0) {
+      return res.status(400).json({
+        message: `Payment Restriction: You have an outstanding unpaid balance of ₱${totalUnpaid.toLocaleString('en-US', { minimumFractionDigits: 2 })}. You cannot reserve another space until your balance is paid in full.`,
+        unpaid_balance: totalUnpaid
+      });
+    }
+
+    // Check if renter already has a pending rental/reservation request
     const existingPending = await query(
       "SELECT id FROM rentals WHERE renter_id = ? AND status = 'pending'",
       [renterId]
     );
     if (existingPending && existingPending.length > 0) {
-      return res.status(400).json({ message: 'You already have a pending rental request. Please wait for staff approval before submitting another.' });
+      return res.status(400).json({ message: 'You already have a pending reservation request. Please wait for staff confirmation before submitting another.' });
     }
 
-    // Calculate default end_date to 1 year if not provided
-    const calculatedEndDate = end_date || new Date(new Date(start_date).setFullYear(new Date(start_date).getFullYear() + 1)).toISOString().split('T')[0];
+    // Calculate default end_date to 6 months if not provided
+    const calculatedEndDate = end_date || getDefaultEndDate(start_date);
 
-    // Validate end_date is after start_date
-    if (calculatedEndDate && new Date(calculatedEndDate) <= new Date(start_date)) {
-      return res.status(400).json({ message: 'End date must be after start date.' });
+    // Validate 6-month minimum rental period
+    if (!validateSixMonthMinimum(start_date, calculatedEndDate)) {
+      return res.status(400).json({
+        message: 'The minimum rental period is 6 months. The system does not allow reservations for less than 6 months.'
+      });
     }
 
     // === MySQL Transaction with Row Locking ===
@@ -274,7 +339,7 @@ exports.renterRequestRental = async (req, res) => {
         conn.release();
 
         return res.status(201).json({
-          message: 'Rental request submitted successfully! The space is now reserved for you pending staff approval.',
+          message: 'Reservation request submitted successfully! The space is now reserved for you pending staff confirmation.',
           rental_id: result.insertId,
           space_number: space.space_number
         });
@@ -305,17 +370,17 @@ exports.renterRequestRental = async (req, res) => {
       await query("UPDATE spaces SET status='reserved' WHERE id=?", [space_id]);
 
       return res.status(201).json({
-        message: 'Rental request submitted successfully! The space is now reserved for you pending staff approval.',
+        message: 'Reservation request submitted successfully! The space is now reserved for you pending staff confirmation.',
         rental_id: result.insertId || result.lastInsertRowid,
         space_number: space.space_number
       });
     }
   } catch (error) {
-    console.error('Error processing renter rental request:', error);
+    console.error('Error processing renter reservation request:', error);
     if (conn) {
       try { conn.release(); } catch (e) { /* ignore */ }
     }
-    return res.status(500).json({ message: 'Server error processing your rental request.' });
+    return res.status(500).json({ message: 'Server error processing your reservation request.' });
   }
 };
 
@@ -333,25 +398,51 @@ exports.getMyRentals = async (req, res) => {
       ORDER BY r.id DESC
     `, [renterId]);
 
-    return res.json(rentals);
+    // Also get renter's current unpaid balance
+    const unpaidRows = await query(`
+      SELECT COALESCE(SUM(balance), 0) as total_unpaid, COUNT(*) as unpaid_count
+      FROM billings
+      WHERE renter_id = ? AND status IN ('unpaid', 'overdue') AND balance > 0
+    `, [renterId]);
+    const totalUnpaid = parseFloat(unpaidRows[0]?.total_unpaid || 0);
+
+    return res.json({
+      rentals,
+      unpaid_balance: totalUnpaid,
+      has_unpaid_balance: totalUnpaid > 0
+    });
   } catch (error) {
     return res.status(500).json({ message: 'Error retrieving your rentals.' });
   }
 };
 
-// Approve Pending Rental (Admin)
+// Approve / Confirm Pending Reservation (Staff/Admin)
 exports.approveRental = async (req, res) => {
   try {
     const { id } = req.params;
 
     const rentals = await query('SELECT * FROM rentals WHERE id = ?', [id]);
     if (!rentals || rentals.length === 0) {
-      return res.status(404).json({ message: 'Rental request not found.' });
+      return res.status(404).json({ message: 'Reservation request not found.' });
     }
 
     const rental = rentals[0];
     if (rental.status !== 'pending') {
-      return res.status(400).json({ message: `Cannot approve a rental with status '${rental.status}'. Only pending rentals can be approved.` });
+      return res.status(400).json({ message: `Cannot approve a reservation with status '${rental.status}'. Only pending reservations can be approved.` });
+    }
+
+    // Payment Restriction: Check if renter has an unpaid balance on existing billings before confirming
+    const unpaidRows = await query(`
+      SELECT COALESCE(SUM(balance), 0) as total_unpaid
+      FROM billings
+      WHERE renter_id = ? AND status IN ('unpaid', 'overdue') AND balance > 0
+    `, [rental.renter_id]);
+    const totalUnpaid = parseFloat(unpaidRows[0]?.total_unpaid || 0);
+    if (totalUnpaid > 0) {
+      return res.status(400).json({
+        message: `Payment Restriction: Cannot confirm reservation. Renter has an outstanding unpaid balance of ₱${totalUnpaid.toLocaleString('en-US', { minimumFractionDigits: 2 })}. The renter cannot reserve another space until their balance is paid in full.`,
+        unpaid_balance: totalUnpaid
+      });
     }
 
     // Transaction logic: Activate rental, mark space rented, activate renter
@@ -359,9 +450,9 @@ exports.approveRental = async (req, res) => {
     await query("UPDATE spaces SET status='rented' WHERE id = ?", [rental.space_id]);
     await query("UPDATE users SET status='active', approval_status='approved' WHERE id = ?", [rental.renter_id]);
 
-    return res.json({ message: 'Rental request approved successfully. Space marked as rented.' });
+    return res.json({ message: 'Reservation confirmed and approved successfully! Space marked as rented.' });
   } catch (error) {
-    return res.status(500).json({ message: 'Error approving rental request.' });
+    return res.status(500).json({ message: 'Error approving reservation request.' });
   }
 };
 
