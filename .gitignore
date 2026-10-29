@@ -1,15 +1,16 @@
-# Dependencies
+# ─── Dependencies ────────────────────────────────────────────────────────────
 node_modules/
 **/node_modules/
 
-# Environment variables & secrets
+# ─── Environment Variables & Secrets ─────────────────────────────────────────
 .env
 .env.*
 !.env.example
 **/.env
 **/.env.*
+!**/.env.example
 
-# Databases & SQLite
+# ─── Database Files ───────────────────────────────────────────────────────────
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
@@ -19,13 +20,13 @@ node_modules/
 **/*.sqlite-shm
 **/*.sqlite-wal
 
-# Uploads / user generated files
-backend/server/uploads/*
-!backend/server/uploads/.gitkeep
+# ─── Uploads / User-Generated Files ──────────────────────────────────────────
+server/uploads/*
+!server/uploads/.gitkeep
 uploads/*
 !uploads/.gitkeep
 
-# Logs
+# ─── Logs ─────────────────────────────────────────────────────────────────────
 logs/
 *.log
 npm-debug.log*
@@ -33,25 +34,29 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Operating System files
+# ─── Operating System ─────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
 Desktop.ini
+ehthumbs.db
 
-# IDE & Editor files
+# ─── IDE & Editor ─────────────────────────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
 *.swo
 *.sublime-project
 *.sublime-workspace
-.antigravity/
-.gemini/
 
-# Build & Temporary outputs
+# ─── Build & Temporary Outputs ────────────────────────────────────────────────
 dist/
 build/
 coverage/
 .nyc_output/
 tmp/
 temp/
+
+# ─── Package Manager Caches ───────────────────────────────────────────────────
+.npm/
+.pnpm-store/
+.yarn/
