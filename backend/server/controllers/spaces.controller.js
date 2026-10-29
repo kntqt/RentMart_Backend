@@ -1,4 +1,4 @@
-const { query, getDriver } = require('../config/db');
+const { query } = require('../config/db');
 
 // List market spaces (with status filter, search, and pagination)
 exports.listSpaces = async (req, res) => {
@@ -21,8 +21,10 @@ exports.listSpaces = async (req, res) => {
     sql += ' ORDER BY space_number ASC';
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
-    sql += ' LIMIT ? OFFSET ?';
-    params.push(parseInt(limit), offset);
+    if (dbDriver === 'mysql') {
+      sql += ' LIMIT ? OFFSET ?';
+      params.push(parseInt(limit), offset);
+    }
 
     const spaces = await query(sql, params);
     
@@ -118,30 +120,5 @@ exports.updateSpaceStatus = async (req, res) => {
     return res.json({ message: `Space status updated to ${status}.` });
   } catch (error) {
     return res.status(500).json({ message: 'Error updating space status.' });
-  }
-};
-
-// Delete space (Admin)
-exports.deleteSpace = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    // Check if space has active or pending rentals
-    const activeRentals = await query(
-      "SELECT id FROM rentals WHERE space_id = ? AND status IN ('active', 'pending')",
-      [id]
-    );
-
-    if (activeRentals && activeRentals.length > 0) {
-      return res.status(400).json({
-        message: 'Cannot delete space with active or pending rental leases. Please complete or cancel the rental first.'
-      });
-    }
-
-    await query('DELETE FROM spaces WHERE id = ?', [id]);
-    return res.json({ message: 'Market space deleted successfully.' });
-  } catch (error) {
-    console.error('Error deleting space:', error);
-    return res.status(500).json({ message: 'Error deleting space.' });
   }
 };

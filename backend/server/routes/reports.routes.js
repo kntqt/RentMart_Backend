@@ -7,7 +7,6 @@ const roleGuard = require('../middleware/roleGuard');
 router.use(verifyToken);
 
 router.get('/admin', roleGuard(['admin']), reportsController.getAdminDashboard);
-router.get('/revenue-performance', roleGuard(['admin', 'staff']), reportsController.getRevenuePerformance);
 router.get('/staff', roleGuard(['staff', 'admin']), reportsController.getStaffDashboard);
 router.get('/renter', roleGuard(['renter', 'admin']), reportsController.getRenterDashboard);
 

@@ -19,6 +19,5 @@ router.use(verifyToken);
 router.post('/', roleGuard(['admin']), upload.single('image'), spacesController.createSpace);
 router.put('/:id', roleGuard(['admin', 'staff']), upload.single('image'), spacesController.updateSpace);
 router.patch('/:id/status', roleGuard(['admin', 'staff']), spacesController.updateSpaceStatus);
-router.delete('/:id', roleGuard(['admin']), spacesController.deleteSpace);
 
 module.exports = router;

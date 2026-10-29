@@ -30,10 +30,6 @@ exports.login = async (req, res) => {
       return res.status(403).json({ message: 'Your account registration was rejected.' });
     }
 
-    if (!user.password) {
-      return res.status(403).json({ message: 'Your account has not been fully set up yet. Please wait for admin approval.' });
-    }
-
     const match = await bcrypt.compare(password, user.password);
     if (!match) {
       return res.status(401).json({ message: 'Invalid credentials or incorrect password.' });
@@ -80,35 +76,13 @@ exports.getMe = async (req, res) => {
 exports.updateProfile = async (req, res) => {
   try {
     const { first_name, middle_name, last_name, contact_number, address, gender, civil_status } = req.body;
-    
-    if (contact_number && contact_number.trim() !== '') {
-      const cleanContact = contact_number.trim();
-      if (!/^\d{11}$/.test(cleanContact)) {
-        return res.status(400).json({ message: 'Contact number must be exactly 11 digits and contain only numbers (e.g. 09123456789).' });
-      }
-    }
+    await query(
+      `UPDATE users SET first_name = ?, middle_name = ?, last_name = ?, contact_number = ?, address = ?, gender = ?, civil_status = ? WHERE id = ?`,
+      [first_name, middle_name, last_name, contact_number, address, gender, civil_status, req.user.id]
+    );
 
-    let sql = `UPDATE users SET first_name = ?, middle_name = ?, last_name = ?, contact_number = ?, address = ?, gender = ?, civil_status = ?`;
-    const params = [first_name, middle_name || '', last_name, contact_number || '', address || '', gender || '', civil_status || ''];
-
-    if (req.file) {
-      sql += `, profile_image = ?`;
-      params.push(req.file.filename);
-    }
-
-    sql += ` WHERE id = ?`;
-    params.push(req.user.id);
-
-    await query(sql, params);
-
-    const updated = await query('SELECT id, role, first_name, middle_name, last_name, email, contact_number, address, gender, civil_status, status, approval_status, profile_image, created_at FROM users WHERE id = ?', [req.user.id]);
-
-    return res.json({
-      message: 'Profile updated successfully.',
-      user: updated[0]
-    });
+    return res.json({ message: 'Profile updated successfully.' });
   } catch (error) {
-    console.error('Error updating profile:', error);
     return res.status(500).json({ message: 'Server error updating profile.' });
   }
 };
@@ -137,53 +111,3 @@ exports.changePassword = async (req, res) => {
     return res.status(500).json({ message: 'Server error changing password.' });
   }
 };
-
-// Register endpoint (Public Renter Self-Registration — no password required)
-exports.register = async (req, res) => {
-  try {
-    const { first_name, middle_name, last_name, email, contact_number, address, gender, civil_status } = req.body;
-
-    if (!first_name || !last_name || !email) {
-      return res.status(400).json({ message: 'First name, last name, and email are required.' });
-    }
-
-    const cleanEmail = email.trim().toLowerCase();
-
-    // Validate 11-digit numeric contact number if provided
-    if (contact_number && contact_number.trim() !== '') {
-      const cleanContact = contact_number.trim();
-      if (!/^\d{11}$/.test(cleanContact)) {
-        return res.status(400).json({ message: 'Contact number must be exactly 11 digits and contain only numbers (e.g. 09123456789).' });
-      }
-    }
-
-    // Check duplicate email
-    const existing = await query('SELECT id FROM users WHERE email = ?', [cleanEmail]);
-    if (existing && existing.length > 0) {
-      return res.status(400).json({ message: `An account with email ${cleanEmail} already exists.` });
-    }
-
-    const result = await query(`
-      INSERT INTO users (role, first_name, middle_name, last_name, email, password, password_plain, contact_number, address, gender, civil_status, status, approval_status)
-      VALUES ('renter', ?, ?, ?, ?, '', '', ?, ?, ?, ?, 'inactive', 'pending')
-    `, [
-      first_name.trim(),
-      middle_name ? middle_name.trim() : '',
-      last_name.trim(),
-      cleanEmail,
-      contact_number ? contact_number.trim() : '',
-      address ? address.trim() : '',
-      gender || '',
-      civil_status || ''
-    ]);
-
-    return res.status(201).json({
-      message: 'Registration submitted! Your account is pending approval. The administrator will create your login credentials upon approval.',
-      id: result.insertId || result.lastInsertRowid
-    });
-  } catch (error) {
-    console.error('Registration error:', error);
-    return res.status(500).json({ message: 'Server error during registration.' });
-  }
-};
-

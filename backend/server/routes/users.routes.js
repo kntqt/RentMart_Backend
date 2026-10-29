@@ -8,8 +8,7 @@ router.use(verifyToken);
 
 router.get('/', roleGuard(['admin', 'staff']), usersController.listUsers);
 router.get('/renters', roleGuard(['admin', 'staff']), usersController.listRenters);
-router.get('/renters/:id/history', roleGuard(['admin', 'staff']), usersController.getRenterProfileHistory);
-router.post('/', roleGuard(['admin', 'staff']), usersController.createUser);
+router.post('/', roleGuard(['admin']), usersController.createUser);
 router.put('/:id', roleGuard(['admin']), usersController.updateUser);
 router.patch('/:id/status', roleGuard(['admin']), usersController.toggleStatus);
 router.patch('/:id/approve', roleGuard(['admin']), usersController.approveRenter);
