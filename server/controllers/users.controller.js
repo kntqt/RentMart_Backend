@@ -197,6 +197,14 @@ exports.createUser = async (req, res) => {
       return res.status(400).json({ message: 'Role, first name, and last name are required.' });
     }
 
+    // Validate 11-digit numeric contact number if provided
+    if (contact_number && contact_number.trim() !== '') {
+      const cleanContact = contact_number.trim();
+      if (!/^\d{11}$/.test(cleanContact)) {
+        return res.status(400).json({ message: 'Contact number must be exactly 11 digits and contain only numbers (e.g. 09123456789).' });
+      }
+    }
+
     // Auto generate email and password if omitted according to specification
     const autoEmail = email || `${first_name.toLowerCase().trim()}${last_name.toLowerCase().trim()}@duero.com`;
     const autoPassword = password || `${first_name.charAt(0).toUpperCase() + first_name.slice(1)}1234`;
@@ -239,6 +247,14 @@ exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
     const { first_name, middle_name, last_name, email, role, status, contact_number, address, password } = req.body;
+
+    // Validate 11-digit numeric contact number if provided
+    if (contact_number && contact_number.trim() !== '') {
+      const cleanContact = contact_number.trim();
+      if (!/^\d{11}$/.test(cleanContact)) {
+        return res.status(400).json({ message: 'Contact number must be exactly 11 digits and contain only numbers (e.g. 09123456789).' });
+      }
+    }
 
     let sql = 'UPDATE users SET first_name=?, middle_name=?, last_name=?, email=?, role=?, status=?, contact_number=?, address=?';
     const params = [first_name, middle_name, last_name, email, role, status, contact_number, address];

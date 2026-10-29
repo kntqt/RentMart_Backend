@@ -81,6 +81,13 @@ exports.updateProfile = async (req, res) => {
   try {
     const { first_name, middle_name, last_name, contact_number, address, gender, civil_status } = req.body;
     
+    if (contact_number && contact_number.trim() !== '') {
+      const cleanContact = contact_number.trim();
+      if (!/^\d{11}$/.test(cleanContact)) {
+        return res.status(400).json({ message: 'Contact number must be exactly 11 digits and contain only numbers (e.g. 09123456789).' });
+      }
+    }
+
     let sql = `UPDATE users SET first_name = ?, middle_name = ?, last_name = ?, contact_number = ?, address = ?, gender = ?, civil_status = ?`;
     const params = [first_name, middle_name || '', last_name, contact_number || '', address || '', gender || '', civil_status || ''];
 
@@ -141,6 +148,14 @@ exports.register = async (req, res) => {
     }
 
     const cleanEmail = email.trim().toLowerCase();
+
+    // Validate 11-digit numeric contact number if provided
+    if (contact_number && contact_number.trim() !== '') {
+      const cleanContact = contact_number.trim();
+      if (!/^\d{11}$/.test(cleanContact)) {
+        return res.status(400).json({ message: 'Contact number must be exactly 11 digits and contain only numbers (e.g. 09123456789).' });
+      }
+    }
 
     // Check duplicate email
     const existing = await query('SELECT id FROM users WHERE email = ?', [cleanEmail]);
